@@ -1,0 +1,73 @@
+name: Deploy to DigitalOcean Droplet
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DROPLET_SSH_KEY }}
+
+      - name: Add Droplet to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DROPLET_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Droplet
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+        run: |
+          ssh $DROPLET_USER@$DROPLET_HOST << 'ENDSSH'
+            set -e
+
+            echo "🚀 Starting deployment..."
+
+            # Navigate to project directory
+            cd /opt/healthcheck
+
+            # Pull latest changes
+            echo "📥 Pulling latest code..."
+            git pull origin main
+
+            # Build and restart services
+            echo "🔨 Building and restarting services..."
+            docker-compose down
+            docker-compose build --no-cache
+            docker-compose up -d
+
+            # Run migrations
+            echo "🗄️  Running database migrations..."
+            docker-compose exec -T backend alembic upgrade head
+
+            # Check services
+            echo "✅ Checking services..."
+            docker-compose ps
+
+            # Health check
+            echo "🏥 Running health check..."
+            sleep 10
+            curl -f http://localhost:8000/health || exit 1
+
+            echo "✨ Deployment completed successfully!"
+          ENDSSH
+
+      - name: Notification
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Deployment successful"
+          else
+            echo "❌ Deployment failed"
+          fi
