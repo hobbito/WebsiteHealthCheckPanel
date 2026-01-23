@@ -1,0 +1,52 @@
+name: health-check-panel
+region: nyc
+
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    github:
+      repo: your-username/health-check-panel
+      branch: main
+      deploy_on_push: true
+
+    health_check:
+      http_path: /health
+
+    http_port: 8000
+
+    instance_count: 1
+    instance_size_slug: basic-xs  # $5/mo - upgrade if needed
+
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        # Set this to your external PostgreSQL connection string:
+        # postgresql+asyncpg://user:password@host:port/dbname
+      - key: SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: "CHANGE_THIS_TO_RANDOM_SECRET_KEY_IN_PRODUCTION"
+      - key: ENVIRONMENT
+        scope: RUN_TIME
+        value: "production"
+      - key: CORS_ORIGINS
+        scope: RUN_TIME
+        value: '["https://your-app.ondigitalocean.app"]'
+      - key: SMTP_HOST
+        scope: RUN_TIME
+        value: ""  # Optional: configure for email notifications
+      - key: SMTP_PORT
+        scope: RUN_TIME
+        value: "587"
+      - key: SMTP_USER
+        scope: RUN_TIME
+        type: SECRET
+        value: ""  # Optional
+      - key: SMTP_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+        value: ""  # Optional
+
+    routes:
+      - path: /

@@ -1,0 +1,34 @@
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Database
+sqlalchemy[asyncio]==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# Task Scheduling (No Redis/Celery needed!)
+apscheduler==3.10.4
+
+# HTTP Client & DNS
+httpx==0.26.0
+dnspython==2.5.0
+
+# Email
+aiosmtplib==3.0.1
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+python-multipart==0.0.6
+email-validator==2.1.0
+
+# SSE Support
+sse-starlette==2.0.0
+
+# Utilities
+python-dotenv==1.0.0
