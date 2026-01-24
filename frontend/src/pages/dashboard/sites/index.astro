@@ -1,0 +1,16 @@
+---
+export const prerender = false;
+import SitesPage from '@/components/dashboard/SitesPage';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sites - Health Check Panel</title>
+</head>
+<body>
+  <SitesPage client:only="react" />
+</body>
+</html>

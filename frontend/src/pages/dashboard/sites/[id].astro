@@ -1,0 +1,17 @@
+---
+export const prerender = false;
+import SiteDetail from '@/components/dashboard/SiteDetail';
+const { id } = Astro.params;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Details - Health Check Panel</title>
+</head>
+<body>
+  <SiteDetail client:only="react" siteId={id} />
+</body>
+</html>
