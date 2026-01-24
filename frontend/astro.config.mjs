@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     tailwind()
   ],
-  output: 'server',
+  output: 'hybrid',
   server: {
     port: 3000,
     host: true

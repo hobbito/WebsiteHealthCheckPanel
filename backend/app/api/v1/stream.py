@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Depends
 from sse_starlette.sse import EventSourceResponse
 
-from app.models.user import User
+from app.domains.auth.models import User
 from app.core.security import get_current_user
 from app.core.event_bus import event_bus
 

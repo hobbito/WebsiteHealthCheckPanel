@@ -4,9 +4,8 @@ Database seeder - Creates default admin user
 import asyncio
 from sqlalchemy import select
 
-from app.database import AsyncSessionLocal
-from app.models.user import User
-from app.models.organization import Organization
+from app.core.database import AsyncSessionLocal
+from app.shared.models import User, Organization
 from app.core.security import get_password_hash
 
 

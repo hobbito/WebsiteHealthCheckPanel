@@ -2,10 +2,10 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db_context
-from app.models.check import CheckConfiguration, CheckResult
-from app.models.site import Site
-from app.checks.registry import CheckRegistry
+from app.core.database import get_db_context
+from app.domains.checks.models import CheckConfiguration, CheckResult
+from app.domains.sites.models import Site
+from app.domains.checks.plugins.registry import CheckRegistry
 from app.core.event_bus import event_bus
 from app.core.scheduler import get_scheduler
 
@@ -72,8 +72,8 @@ async def execute_check(check_id: int):
             await db.refresh(db_result)
 
             logger.info(
-                f"Check {check_id} completed: {result.status.value} "
-                f"(response_time: {result.response_time_ms:.0f}ms)"
+                f"Check {check_id} completed: {result.status} "
+                f"(response_time: {result.response_time_ms}ms)"
             )
 
             # Publish to event bus for real-time updates
@@ -85,16 +85,16 @@ async def execute_check(check_id: int):
                     'site_id': site.id,
                     'site_name': site.name,
                     'check_name': check_config.name,
-                    'status': result.status.value,
+                    'status': result.status,
                     'response_time_ms': result.response_time_ms,
                     'checked_at': result.checked_at.isoformat(),
                     'error_message': result.error_message,
                 }
             )
 
-            # Handle notifications if failure
-            if result.status == CheckStatus.FAILURE:
-                await NotificationService.handle_check_failure(db, check_config, db_result)
+            # Handle notifications if failure (TODO: implement NotificationService)
+            # if result.status == "failure":
+            #     await NotificationService.handle_check_failure(db, check_config, db_result)
 
         except Exception as e:
             logger.error(f"Error executing check {check_id}: {e}", exc_info=True)

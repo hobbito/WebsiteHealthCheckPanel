@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import axios from 'axios'
+import { authApi } from '@/lib/api'
 
 export default function LoginForm() {
   const [email, setEmail] = useState('admin@admin.com')
-  const [password, setPassword] = useState('admin')
+  const [password, setPassword] = useState('adminadmin')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
@@ -13,37 +13,25 @@ export default function LoginForm() {
     setIsLoading(true)
 
     try {
-      const loginResponse = await axios.post(
-        '/api/v1/auth/login',
-        new URLSearchParams({
-          username: email,
-          password: password,
-        }),
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        }
-      )
+      // Login and get tokens
+      const { access_token, refresh_token } = await authApi.login(email, password)
 
-      const { access_token, refresh_token } = loginResponse.data
-
+      // Store tokens
       localStorage.setItem('access_token', access_token)
       localStorage.setItem('refresh_token', refresh_token)
 
-      const userResponse = await axios.get('/api/v1/auth/me', {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-        },
-      })
+      // Get user info (will use the token automatically via interceptor)
+      const user = await authApi.getCurrentUser()
+      localStorage.setItem('user', JSON.stringify(user))
 
-      localStorage.setItem('user', JSON.stringify(userResponse.data))
+      // Redirect to dashboard
       window.location.href = '/dashboard'
 
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || err.message || 'Login failed. Please try again.'
       setError(errorMsg)
 
+      // Clean up on error
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       localStorage.removeItem('user')
@@ -159,7 +147,7 @@ export default function LoginForm() {
 
           <div className="mt-6 text-center">
             <p className="text-xs text-gray-500">
-              Default credentials: <span className="font-medium text-gray-700">admin@admin.com</span> / <span className="font-medium text-gray-700">admin</span>
+              Default credentials: <span className="font-medium text-gray-700">admin@admin.com</span> / <span className="font-medium text-gray-700">adminadmin</span>
             </p>
           </div>
         </div>

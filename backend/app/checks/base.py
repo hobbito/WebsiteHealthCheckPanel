@@ -1,80 +1,37 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, Optional
-from app.models.check import CheckStatus
+from typing import Any, Dict, Optional
+from pydantic import BaseModel, Field
 
 
-@dataclass
-class CheckResult:
-    """Result of a check execution"""
-    status: CheckStatus
-    response_time_ms: Optional[float] = None
-    error_message: Optional[str] = None
-    result_data: Optional[Dict[str, Any]] = None
-    checked_at: datetime = None
-
-    def __post_init__(self):
-        if self.checked_at is None:
-            self.checked_at = datetime.utcnow()
+class CheckResult(BaseModel):
+    status: str = Field(..., description="Status: 'success', 'failure', or 'warning'")
+    response_time_ms: Optional[int] = Field(None, description="Response time in milliseconds")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+    result_data: Dict[str, Any] = Field(default_factory=dict, description="Additional check-specific data")
+    checked_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp of check")
 
 
 class BaseCheck(ABC):
-    """
-    Abstract base class for all health checks.
-
-    Each check type must implement:
-    - execute(): Perform the actual check
-    - get_config_schema(): Return JSON schema for configuration validation
-    - get_display_name(): Human-readable name for the check type
-    """
-
+    @property
     @abstractmethod
-    async def execute(self, url: str, config: Dict[str, Any]) -> CheckResult:
-        """
-        Execute the health check.
-
-        Args:
-            url: The URL/domain to check
-            config: Check-specific configuration from check_configurations.configuration
-
-        Returns:
-            CheckResult with status, response_time, and optional error/data
-        """
+    def check_type(self) -> str:
         pass
 
-    @classmethod
+    @property
     @abstractmethod
-    def get_config_schema(cls) -> Dict[str, Any]:
-        """
-        Return JSON Schema for validating this check's configuration.
-
-        Returns:
-            JSON Schema dict describing required/optional config fields
-        """
+    def display_name(self) -> str:
         pass
 
-    @classmethod
+    @property
     @abstractmethod
-    def get_display_name(cls) -> str:
-        """
-        Return human-readable name for this check type.
-
-        Returns:
-            Display name (e.g., "HTTP Status Check", "DNS Record Check")
-        """
+    def description(self) -> str:
         pass
 
-    @classmethod
-    def get_check_type(cls) -> str:
-        """
-        Return the unique identifier for this check type.
-        Default implementation uses lowercase class name without 'Check' suffix.
+    @abstractmethod
+    async def execute(self, site_url: str, config: Dict[str, Any]) -> CheckResult:
+        pass
 
-        Returns:
-            Check type identifier (e.g., "http", "dns", "email")
-        """
-        class_name = cls.__name__
-        if class_name.endswith("Check"):
-            class_name = class_name[:-5]  # Remove "Check" suffix
-        return class_name.lower()
+    @abstractmethod
+    def get_config_schema(self) -> Dict[str, Any]:
+        pass

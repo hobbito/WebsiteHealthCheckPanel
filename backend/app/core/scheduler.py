@@ -4,7 +4,7 @@ from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 import logging
 
-from app.config import settings
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 

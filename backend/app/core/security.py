@@ -7,8 +7,8 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.config import settings
-from app.database import get_db
+from app.core.config import settings
+from app.core.database import get_db
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -71,7 +71,7 @@ async def get_current_user(
     Get the current authenticated user from JWT token.
     This will be imported and used after User model is created.
     """
-    from app.models.user import User
+    from app.domains.auth.models import User
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

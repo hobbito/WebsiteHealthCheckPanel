@@ -198,6 +198,22 @@ Record types: `A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`
 
 ## Architecture
 
+### Domain-Driven Design
+
+El backend está organizado por **dominios de negocio**:
+- **auth**: Autenticación y gestión de usuarios
+- **sites**: Gestión de sitios web a monitorear
+- **checks**: Sistema de health checks extensible
+- **notifications**: (Upcoming) Sistema de notificaciones multi-canal
+
+Cada dominio contiene:
+- `models.py` - Modelos de base de datos (SQLAlchemy)
+- `schemas.py` - Schemas de validación (Pydantic)
+- `api.py` - Rutas de API (FastAPI)
+- `service.py` - Lógica de negocio (opcional)
+
+📖 **Ver [backend/ARCHITECTURE.md](backend/ARCHITECTURE.md) para más detalles.**
+
 ### Check Plugin System
 
 All checks implement the `BaseCheck` interface:
@@ -293,18 +309,18 @@ alembic downgrade -1
 /Users/alex/Sites/WebsiteHealthCheckPanel/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/          # API endpoints
-│   │   ├── checks/          # Check plugins
-│   │   ├── core/            # Security, scheduler, event bus
-│   │   ├── models/          # SQLAlchemy models
-│   │   ├── schemas/         # Pydantic schemas
-│   │   ├── services/        # Business logic
-│   │   ├── tasks/           # Background tasks
-│   │   ├── config.py
-│   │   ├── database.py
-│   │   ├── main.py
+│   │   ├── core/            # Infrastructure (config, DB, security, scheduler, event bus)
+│   │   ├── domains/         # Business logic organized by domain (DDD)
+│   │   │   ├── auth/        # Authentication & users
+│   │   │   ├── sites/       # Site management
+│   │   │   ├── checks/      # Health check system + plugins
+│   │   │   └── notifications/ # (Upcoming) Notification system
+│   │   ├── api/v1/          # Generic API endpoints (SSE stream)
+│   │   ├── tasks/           # Background tasks (check execution)
+│   │   ├── main.py          # FastAPI app entry point
 │   │   └── seed.py          # Database seeder
 │   ├── alembic/             # Database migrations
+│   ├── ARCHITECTURE.md      # Detailed architecture documentation
 │   └── requirements.txt
 ├── frontend/                # Astro + React Islands
 │   ├── src/
@@ -314,30 +330,35 @@ alembic downgrade -1
 │   │   └── pages/           # Astro pages
 │   ├── astro.config.mjs
 │   └── package.json
+├── tests/
+│   ├── integration/         # End-to-end tests
+│   └── unit/                # Unit tests
 ├── .do/
 │   └── app.yaml            # DigitalOcean config
 ├── Dockerfile
 ├── docker-compose.yml
 ├── Makefile                # Development commands
+├── REFACTORING.md          # Architecture refactoring documentation
 └── README.md
 ```
 
+**📖 See [backend/ARCHITECTURE.md](backend/ARCHITECTURE.md) for detailed architecture documentation.**
+
 ## Adding New Check Types
 
-1. Create new file in `backend/app/checks/`:
+1. Create new file in `backend/app/domains/checks/plugins/`:
 
 ```python
-from app.checks.base import BaseCheck, CheckResult
-from app.checks.registry import CheckRegistry
+from app.domains.checks.plugins.base import BaseCheck, CheckResult
+from app.domains.checks.plugins.registry import register_check
 
-@CheckRegistry.register
+@register_check
 class MyCustomCheck(BaseCheck):
-    @classmethod
-    def get_display_name(cls) -> str:
-        return "My Custom Check"
+    check_type = "my_custom"
+    display_name = "My Custom Check"
+    description = "Description of what this check does"
 
-    @classmethod
-    def get_config_schema(cls) -> Dict[str, Any]:
+    def get_config_schema(self) -> Dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -348,15 +369,15 @@ class MyCustomCheck(BaseCheck):
     async def execute(self, url: str, config: Dict[str, Any]) -> CheckResult:
         # Implement check logic
         return CheckResult(
-            status=CheckStatus.SUCCESS,
+            status="success",
             response_time_ms=100
         )
 ```
 
-2. Import in `main.py` to register:
+2. Import in `backend/app/domains/checks/plugins/__init__.py`:
 
 ```python
-from app.checks import mycustom_check  # noqa: F401
+from . import my_custom_check
 ```
 
 That's it! The check will automatically appear in `/api/v1/checks/types`.

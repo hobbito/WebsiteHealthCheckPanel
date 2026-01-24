@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
-from app.config import settings
-from app.database import engine, Base
+from app.core.config import settings
+from app.core.database import engine, Base
 
 
 @asynccontextmanager
@@ -13,11 +13,11 @@ async def lifespan(app: FastAPI):
     # Startup
     print(f"🚀 Starting {settings.APP_NAME}...")
 
-    # Import models to register them with Base
-    from app import models  # noqa: F401
+    # Import all domain models to register them with Base
+    from app.domains import auth, sites, checks  # noqa: F401
 
     # Import check plugins to register them
-    from app.checks import http_check, dns_check  # noqa: F401
+    from app.domains.checks.plugins import http_check  # noqa: F401
 
     # Create tables if they don't exist (development only)
     if settings.ENVIRONMENT == "development":
@@ -97,10 +97,13 @@ async def root():
     }
 
 
-# Include API routers
-from app.api.v1 import auth, sites, checks, stream
+# Include domain API routers
+from app.domains.auth import router as auth_router
+from app.domains.sites import router as sites_router
+from app.domains.checks import router as checks_router
+from app.api.v1 import stream
 
-app.include_router(auth.router, prefix=f"{settings.API_V1_PREFIX}/auth", tags=["Authentication"])
-app.include_router(sites.router, prefix=f"{settings.API_V1_PREFIX}/sites", tags=["Sites"])
-app.include_router(checks.router, prefix=f"{settings.API_V1_PREFIX}/checks", tags=["Checks"])
+app.include_router(auth_router, prefix=f"{settings.API_V1_PREFIX}/auth", tags=["Authentication"])
+app.include_router(sites_router, prefix=f"{settings.API_V1_PREFIX}/sites", tags=["Sites"])
+app.include_router(checks_router, prefix=f"{settings.API_V1_PREFIX}/checks", tags=["Checks"])
 app.include_router(stream.router, prefix=f"{settings.API_V1_PREFIX}/stream", tags=["Real-time Updates"])
