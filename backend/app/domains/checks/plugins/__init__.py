@@ -14,6 +14,9 @@ from . import json_api_check
 from . import header_check
 from . import tls_check
 from . import redirect_check
+from . import smtp_check
+from . import imap_check
+from . import pop3_check
 
 __all__ = [
     "BaseCheck",
