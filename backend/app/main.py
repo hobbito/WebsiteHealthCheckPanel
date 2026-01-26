@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
     from app.domains.checks.plugins import ping_check, keyword_check, port_check  # noqa: F401
 
     # Import notification channels to register them
-    from app.domains.notifications.channels import email, webhook  # noqa: F401
+    from app.domains.notifications.channels import email, webhook, slack, discord  # noqa: F401
 
     # Create tables if they don't exist (development only)
     if settings.ENVIRONMENT == "development":

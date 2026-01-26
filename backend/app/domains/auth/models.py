@@ -9,8 +9,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.domains.sites.models import Site
-    # Notifications models don't exist yet, commenting out for now
-    # from app.domains.notifications.models import NotificationChannel, NotificationRule
+    from app.domains.notifications.models import NotificationChannel, NotificationRule
 
 
 class UserRole(str, enum.Enum):
@@ -63,9 +62,6 @@ class User(Base):
 
     # Relationships
     organization = relationship("Organization", back_populates="users")
-    # TODO: Uncomment when notifications domain is implemented
-    # notification_channels = relationship("NotificationChannel", back_populates="user", cascade="all, delete-orphan")
-    # notification_rules = relationship("NotificationRule", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User(id={self.id}, email='{self.email}', role='{self.role}')>"

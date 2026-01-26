@@ -16,6 +16,8 @@ class NotificationChannelType(str, enum.Enum):
     """Type of notification channel"""
     EMAIL = "email"
     WEBHOOK = "webhook"
+    SLACK = "slack"
+    DISCORD = "discord"
 
 
 class NotificationTrigger(str, enum.Enum):
