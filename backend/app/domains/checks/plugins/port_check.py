@@ -118,14 +118,11 @@ class PortCheck(BaseCheck):
         sock.settimeout(timeout)
         try:
             result = sock.connect_ex((hostname, port))
-            return result == 0
+            if result != 0:
+                raise ConnectionRefusedError(f"Port {port} is closed")
+            return True
         finally:
             sock.close()
-
-        if result != 0:
-            raise ConnectionRefusedError(f"Port {port} is closed")
-
-        return True
 
     def get_config_schema(self) -> Dict[str, Any]:
         return {

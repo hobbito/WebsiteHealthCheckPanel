@@ -9,6 +9,11 @@ from . import ssl_check
 from . import ping_check
 from . import keyword_check
 from . import port_check
+from . import response_time_check
+from . import json_api_check
+from . import header_check
+from . import tls_check
+from . import redirect_check
 
 __all__ = [
     "BaseCheck",
