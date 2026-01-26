@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { authApi } from '@/lib/api'
 
 export default function LoginForm() {
-  const [email, setEmail] = useState('admin@admin.com')
-  const [password, setPassword] = useState('adminadmin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 

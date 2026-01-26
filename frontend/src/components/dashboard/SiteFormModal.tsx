@@ -1,18 +1,13 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { sitesApi } from '@/lib/api'
 import Modal from '@/components/common/Modal'
+import type { Site } from '@/lib/types'
 
 interface SiteFormModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
-  site?: {
-    id: number
-    name: string
-    url: string
-    description?: string
-    is_active: boolean
-  }
+  site?: Site
 }
 
 export default function SiteFormModal({ isOpen, onClose, onSuccess, site }: SiteFormModalProps) {
@@ -48,8 +43,6 @@ export default function SiteFormModal({ isOpen, onClose, onSuccess, site }: Site
     setIsLoading(true)
 
     try {
-      const token = localStorage.getItem('access_token')
-      
       const payload = {
         name,
         url,
@@ -57,25 +50,21 @@ export default function SiteFormModal({ isOpen, onClose, onSuccess, site }: Site
         is_active: isActive
       }
 
-      if (isEdit) {
-        await axios.put(`/api/v1/sites/${site.id}`, payload, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+      if (isEdit && site) {
+        await sitesApi.update(site.id, payload)
       } else {
-        await axios.post('/api/v1/sites/', payload, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        await sitesApi.create(payload)
       }
 
       onSuccess()
       onClose()
-      
+
       // Reset form
       setName('')
       setUrl('')
       setDescription('')
       setIsActive(true)
-      
+
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to save site')
     } finally {

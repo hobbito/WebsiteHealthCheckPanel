@@ -1,20 +1,62 @@
-import { useEffect, useState } from 'react'
-import axios from 'axios'
-import type { User, Site } from '@/lib/types'
+import { useEffect, useState, useCallback } from 'react'
+import { authApi, sitesApi, checksApi } from '@/lib/api'
+import { useAuthStore, useSitesStore, useChecksStore } from '@/lib/store'
+import { useRealtimeUpdates } from '@/lib/useSSE'
+import type { User, Site, CheckResult, CheckConfiguration } from '@/lib/types'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import DashboardHeader from './DashboardHeader'
 import DashboardStats from './DashboardStats'
 
 export default function Dashboard() {
-  const [user, setUser] = useState<User | null>(null)
-  const [sites, setSites] = useState<Site[]>([])
-  const [totalChecks, setTotalChecks] = useState(0)
-  const [recentResults, setRecentResults] = useState<any[]>([])
+  const { user, setUser, logout } = useAuthStore()
+  const { sites, setSites } = useSitesStore()
+  const { checks, setChecks, results, setResults, addResult } = useChecksStore()
   const [loading, setLoading] = useState(true)
+  const [recentResults, setRecentResults] = useState<(CheckResult & { check_name: string })[]>([])
+
+  // Connect to SSE for real-time updates
+  const { isConnected } = useRealtimeUpdates(!!user)
+
+  // Handle real-time check result updates
+  const handleNewResult = useCallback((result: CheckResult) => {
+    const check = checks.find(c => c.id === result.check_configuration_id)
+    if (check) {
+      setRecentResults(prev => [{
+        ...result,
+        check_name: check.name
+      }, ...prev].slice(0, 10))
+    }
+  }, [checks])
 
   useEffect(() => {
     checkAuth()
   }, [])
+
+  // Update recent results when checks store is updated
+  useEffect(() => {
+    if (checks.length > 0) {
+      updateRecentResults()
+    }
+  }, [results])
+
+  const updateRecentResults = () => {
+    const allResults: (CheckResult & { check_name: string })[] = []
+    checks.forEach(check => {
+      const checkResults = results.get(check.id) || []
+      checkResults.forEach(result => {
+        allResults.push({
+          ...result,
+          check_name: check.name
+        })
+      })
+    })
+
+    allResults.sort((a, b) =>
+      new Date(b.checked_at).getTime() - new Date(a.checked_at).getTime()
+    )
+
+    setRecentResults(allResults.slice(0, 10))
+  }
 
   const checkAuth = async () => {
     const token = localStorage.getItem('access_token')
@@ -25,105 +67,54 @@ export default function Dashboard() {
     }
 
     try {
-      // Verify token and get user data
-      const userResponse = await axios.get('/api/v1/auth/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      setUser(userResponse.data)
+      const userData = await authApi.getCurrentUser()
+      setUser(userData)
 
       // Load all data in parallel
       await Promise.all([
         loadSites(),
-        loadChecks(),
-        loadRecentResults()
+        loadChecksAndResults()
       ])
 
       setLoading(false)
-
     } catch (err: any) {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('user')
+      logout()
       window.location.href = '/login'
     }
   }
 
   const loadSites = async () => {
-    const token = localStorage.getItem('access_token')
-    if (!token) return
-
     try {
-      const sitesResponse = await axios.get('/api/v1/sites/', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      setSites(sitesResponse.data)
+      const sitesData = await sitesApi.list()
+      setSites(sitesData)
     } catch (err) {
       console.error('Error loading sites:', err)
     }
   }
 
-  const loadChecks = async () => {
-    const token = localStorage.getItem('access_token')
-    if (!token) return
-
+  const loadChecksAndResults = async () => {
     try {
-      const checksResponse = await axios.get('/api/v1/checks/', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const checksData = await checksApi.list()
+      setChecks(checksData)
+
+      // Load results for each check
+      const resultsPromises = checksData.slice(0, 10).map(async (check) => {
+        try {
+          const checkResults = await checksApi.getResults(check.id, 10)
+          setResults(check.id, checkResults)
+        } catch (err) {
+          console.error(`Error loading results for check ${check.id}:`, err)
+        }
       })
-      setTotalChecks(checksResponse.data.length)
+
+      await Promise.all(resultsPromises)
     } catch (err) {
       console.error('Error loading checks:', err)
     }
   }
 
-  const loadRecentResults = async () => {
-    const token = localStorage.getItem('access_token')
-    if (!token) return
-
-    try {
-      const checksResponse = await axios.get('/api/v1/checks/', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (checksResponse.data.length > 0) {
-        // Load results for the first few checks
-        const resultsPromises = checksResponse.data.slice(0, 5).map((check: any) =>
-          axios.get(`/api/v1/checks/${check.id}/results?limit=10`, {
-            headers: { Authorization: `Bearer ${token}` }
-          }).catch(() => ({ data: [] }))
-        )
-
-        const resultsResponses = await Promise.all(resultsPromises)
-        const allResults = resultsResponses.flatMap((res, idx) =>
-          res.data.map((r: any) => ({
-            ...r,
-            check_name: checksResponse.data[idx]?.name || 'Unknown',
-            site_id: checksResponse.data[idx]?.site_id
-          }))
-        )
-
-        setRecentResults(allResults.sort((a, b) =>
-          new Date(b.checked_at).getTime() - new Date(a.checked_at).getTime()
-        ).slice(0, 10))
-      }
-    } catch (err) {
-      console.error('Error loading recent results:', err)
-    }
-  }
-
   const handleLogout = () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('user')
+    logout()
     window.location.href = '/login'
   }
 
@@ -138,15 +129,24 @@ export default function Dashboard() {
       <DashboardHeader user={user} onLogout={handleLogout} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-1">Overview of your monitoring system</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600 mt-1">Overview of your monitoring system</p>
+          </div>
+          {/* Real-time connection indicator */}
+          <div className="flex items-center gap-2">
+            <span className={`inline-block w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+            <span className="text-sm text-gray-500">
+              {isConnected ? 'Live' : 'Connecting...'}
+            </span>
+          </div>
         </div>
 
         <DashboardStats
           sites={sites}
           user={user}
-          totalChecks={totalChecks}
+          totalChecks={checks.length}
           failedChecks={failedChecks}
         />
 
@@ -225,7 +225,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-center gap-3 ml-4">
                       <span className="text-sm text-gray-600">
-                        {result.response_time_ms}ms
+                        {result.response_time_ms ?? '-'}ms
                       </span>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                         result.status === 'success'

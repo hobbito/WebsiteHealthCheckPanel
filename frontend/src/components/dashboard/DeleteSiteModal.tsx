@@ -1,15 +1,13 @@
 import { useState } from 'react'
-import axios from 'axios'
+import { sitesApi } from '@/lib/api'
 import Modal from '@/components/common/Modal'
+import type { Site } from '@/lib/types'
 
 interface DeleteSiteModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
-  site: {
-    id: number
-    name: string
-  }
+  site: Site
 }
 
 export default function DeleteSiteModal({ isOpen, onClose, onSuccess, site }: DeleteSiteModalProps) {
@@ -21,11 +19,7 @@ export default function DeleteSiteModal({ isOpen, onClose, onSuccess, site }: De
     setIsLoading(true)
 
     try {
-      const token = localStorage.getItem('access_token')
-      await axios.delete(`/api/v1/sites/${site.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-
+      await sitesApi.delete(site.id)
       onSuccess()
       onClose()
     } catch (err: any) {

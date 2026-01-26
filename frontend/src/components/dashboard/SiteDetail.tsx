@@ -1,26 +1,35 @@
-import { useEffect, useState } from 'react'
-import axios from 'axios'
-import type { Site } from '@/lib/types'
+import { useEffect, useState, useMemo } from 'react'
+import { authApi, sitesApi, checksApi } from '@/lib/api'
+import { useAuthStore } from '@/lib/store'
+import { useRealtimeUpdates } from '@/lib/useSSE'
+import type { Site, User, CheckConfiguration, CheckResult } from '@/lib/types'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 import DashboardHeader from './DashboardHeader'
 import CheckFormModal from './CheckFormModal'
 import SiteFormModal from './SiteFormModal'
 import DeleteSiteModal from './DeleteSiteModal'
+import ResponseTimeChart from '@/components/charts/ResponseTimeChart'
+import UptimeChart from '@/components/charts/UptimeChart'
 
 interface SiteDetailProps {
   siteId: string
 }
 
 export default function SiteDetail({ siteId }: SiteDetailProps) {
-  const [user, setUser] = useState<any>(null)
+  const { user, setUser, logout } = useAuthStore()
   const [site, setSite] = useState<Site | null>(null)
-  const [checks, setChecks] = useState<any[]>([])
-  const [results, setResults] = useState<any[]>([])
+  const [checks, setChecks] = useState<CheckConfiguration[]>([])
+  const [results, setResults] = useState<(CheckResult & { check_name: string })[]>([])
+  const [allResults, setAllResults] = useState<CheckResult[]>([])
   const [loading, setLoading] = useState(true)
   const [isCheckModalOpen, setIsCheckModalOpen] = useState(false)
-  const [selectedCheck, setSelectedCheck] = useState<any>(undefined)
+  const [selectedCheck, setSelectedCheck] = useState<CheckConfiguration | undefined>(undefined)
   const [isSiteModalOpen, setIsSiteModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [runningCheck, setRunningCheck] = useState<number | null>(null)
+
+  // Connect to SSE for real-time updates
+  const { isConnected } = useRealtimeUpdates(!!user)
 
   useEffect(() => {
     loadData()
@@ -34,30 +43,46 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
     }
 
     try {
-      const [userRes, siteRes, checksRes] = await Promise.all([
-        axios.get('/api/v1/auth/me', { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`/api/v1/sites/${siteId}`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`/api/v1/checks/?site_id=${siteId}`, { headers: { Authorization: `Bearer ${token}` } })
+      // Get user data if not in store
+      let userData = user
+      if (!userData) {
+        userData = await authApi.getCurrentUser()
+        setUser(userData)
+      }
+
+      // Load site and checks in parallel
+      const [siteData, checksData] = await Promise.all([
+        sitesApi.get(parseInt(siteId)),
+        checksApi.list(parseInt(siteId))
       ])
 
-      setUser(userRes.data)
-      setSite(siteRes.data)
-      setChecks(checksRes.data)
+      setSite(siteData)
+      setChecks(checksData)
 
-      // Load recent results if there are checks
-      if (checksRes.data.length > 0) {
-        const resultsPromises = checksRes.data.slice(0, 3).map((check: any) =>
-          axios.get(`/api/v1/checks/${check.id}/results?limit=5`, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+      // Load results for all checks
+      if (checksData.length > 0) {
+        const resultsPromises = checksData.map(async (check) => {
+          try {
+            return await checksApi.getResults(check.id, 20)
+          } catch {
+            return []
+          }
+        })
+
+        const resultsArrays = await Promise.all(resultsPromises)
+        const allResultsData = resultsArrays.flat()
+        setAllResults(allResultsData)
+
+        // Map results with check names
+        const resultsWithNames = resultsArrays.flatMap((checkResults, idx) =>
+          checkResults.map(r => ({ ...r, check_name: checksData[idx].name }))
         )
-        const resultsResponses = await Promise.all(resultsPromises)
-        const allResults = resultsResponses.flatMap((res, idx) =>
-          res.data.map((r: any) => ({ ...r, check_name: checksRes.data[idx].name }))
-        )
-        setResults(allResults.sort((a, b) =>
+
+        resultsWithNames.sort((a, b) =>
           new Date(b.checked_at).getTime() - new Date(a.checked_at).getTime()
-        ))
+        )
+
+        setResults(resultsWithNames)
       }
 
       setLoading(false)
@@ -67,8 +92,31 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
     }
   }
 
+  // Calculate metrics
+  const metrics = useMemo(() => {
+    const successResults = allResults.filter(r => r.status === 'success')
+    const failureResults = allResults.filter(r => r.status === 'failure')
+
+    const uptimePercentage = allResults.length > 0
+      ? Math.round((successResults.length / allResults.length) * 10000) / 100
+      : 0
+
+    const validResponseTimes = allResults.filter(r => r.response_time_ms !== null)
+    const avgResponseTime = validResponseTimes.length > 0
+      ? Math.round(validResponseTimes.reduce((sum, r) => sum + (r.response_time_ms || 0), 0) / validResponseTimes.length)
+      : 0
+
+    return {
+      uptime: uptimePercentage,
+      avgResponseTime,
+      totalChecks: checks.length,
+      activeChecks: checks.filter(c => c.is_enabled).length,
+      recentFailures: failureResults.length
+    }
+  }, [allResults, checks])
+
   const handleLogout = () => {
-    localStorage.clear()
+    logout()
     window.location.href = '/login'
   }
 
@@ -77,21 +125,23 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
     setIsCheckModalOpen(true)
   }
 
-  const handleEditCheck = (check: any) => {
+  const handleEditCheck = (check: CheckConfiguration) => {
     setSelectedCheck(check)
     setIsCheckModalOpen(true)
   }
 
   const handleRunCheck = async (checkId: number) => {
-    const token = localStorage.getItem('access_token')
+    setRunningCheck(checkId)
     try {
-      await axios.post(`/api/v1/checks/${checkId}/run-now`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      await checksApi.run(checkId)
       // Reload data after a short delay to see results
-      setTimeout(() => loadData(), 2000)
+      setTimeout(() => {
+        loadData()
+        setRunningCheck(null)
+      }, 2000)
     } catch (err) {
       console.error('Error running check:', err)
+      setRunningCheck(null)
     }
   }
 
@@ -104,11 +154,8 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
       return
     }
 
-    const token = localStorage.getItem('access_token')
     try {
-      await axios.delete(`/api/v1/checks/${checkId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      await checksApi.delete(checkId)
       loadData()
     } catch (err) {
       console.error('Error deleting check:', err)
@@ -136,10 +183,6 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
     return <LoadingSpinner />
   }
 
-  const totalChecks = checks.length
-  const activeChecks = checks.filter(c => c.is_enabled).length
-  const failedResults = results.filter(r => r.status === 'FAILURE').length
-
   return (
     <div className="min-h-screen bg-gray-50">
       <DashboardHeader user={user} onLogout={handleLogout} />
@@ -156,6 +199,11 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
           <span className="text-gray-900 font-medium">{site.name}</span>
+          {/* Real-time indicator */}
+          <div className="flex items-center gap-1 ml-4">
+            <span className={`inline-block w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+            <span className="text-xs text-gray-400">{isConnected ? 'Live' : 'Offline'}</span>
+          </div>
         </nav>
 
         {/* Site Header */}
@@ -219,7 +267,12 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Uptime</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">-</p>
+                <p className={`text-2xl font-bold mt-1 ${
+                  metrics.uptime >= 99 ? 'text-green-600' :
+                  metrics.uptime >= 95 ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {metrics.uptime}%
+                </p>
               </div>
               <div className="bg-green-50 rounded-lg p-3">
                 <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -233,7 +286,7 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Avg Response</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">-</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{metrics.avgResponseTime}ms</p>
               </div>
               <div className="bg-blue-50 rounded-lg p-3">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -247,7 +300,7 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Checks</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{totalChecks}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{metrics.totalChecks}</p>
               </div>
               <div className="bg-purple-50 rounded-lg p-3">
                 <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -261,7 +314,9 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Recent Failures</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{failedResults}</p>
+                <p className={`text-2xl font-bold mt-1 ${metrics.recentFailures > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                  {metrics.recentFailures}
+                </p>
               </div>
               <div className="bg-red-50 rounded-lg p-3">
                 <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -272,12 +327,20 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
           </div>
         </div>
 
+        {/* Charts Section */}
+        {allResults.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <ResponseTimeChart results={allResults} title="Response Time Trend" />
+            <UptimeChart results={allResults} title="Check Success Rate" />
+          </div>
+        )}
+
         {/* Checks Section */}
         <div className="bg-white border border-gray-200 rounded-lg mb-6">
           <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Health Checks</h2>
-              <p className="text-sm text-gray-600 mt-0.5">{activeChecks} of {totalChecks} active</p>
+              <p className="text-sm text-gray-600 mt-0.5">{metrics.activeChecks} of {metrics.totalChecks} active</p>
             </div>
             <button
               onClick={handleAddCheck}
@@ -367,14 +430,27 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
                         </button>
                         <button
                           onClick={() => handleRunCheck(check.id)}
-                          className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50"
+                          disabled={runningCheck === check.id}
+                          className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50 disabled:opacity-50"
                           title="Run check now"
                         >
-                          <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Run Now
+                          {runningCheck === check.id ? (
+                            <>
+                              <svg className="animate-spin w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Running...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Run Now
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -394,7 +470,7 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
             </div>
             <div className="p-6">
               <div className="space-y-3">
-                {results.map((result) => (
+                {results.slice(0, 15).map((result) => (
                   <div key={result.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                     <div className="flex items-center gap-4 flex-1">
                       <div className={`${result.status === 'success' ? 'bg-green-50' : 'bg-red-50'} rounded-lg p-2`}>
@@ -413,10 +489,15 @@ export default function SiteDetail({ siteId }: SiteDetailProps) {
                         <p className="text-xs text-gray-500 mt-0.5">
                           {new Date(result.checked_at).toLocaleString()}
                         </p>
+                        {result.error_message && (
+                          <p className="text-xs text-red-500 mt-1 truncate" title={result.error_message}>
+                            {result.error_message}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-900">{result.response_time_ms}ms</span>
+                      <span className="text-sm font-medium text-gray-900">{result.response_time_ms ?? '-'}ms</span>
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
                         result.status === 'success'
                           ? 'bg-green-50 text-green-700 border border-green-200'

@@ -1,27 +1,21 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { checksApi } from '@/lib/api'
 import Modal from '@/components/common/Modal'
+import type { CheckConfiguration, CheckTypeInfo } from '@/lib/types'
 
 interface CheckFormModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
   siteId: number
-  check?: {
-    id: number
-    name: string
-    check_type: string
-    configuration: any
-    interval_seconds: number
-    is_enabled: boolean
-  }
+  check?: CheckConfiguration
 }
 
 export default function CheckFormModal({ isOpen, onClose, onSuccess, siteId, check }: CheckFormModalProps) {
-  const [checkTypes, setCheckTypes] = useState<any[]>([])
+  const [checkTypes, setCheckTypes] = useState<CheckTypeInfo[]>([])
   const [selectedType, setSelectedType] = useState('')
   const [name, setName] = useState('')
-  const [configuration, setConfiguration] = useState<any>({})
+  const [configuration, setConfiguration] = useState<Record<string, any>>({})
   const [intervalSeconds, setIntervalSeconds] = useState(300)
   const [isEnabled, setIsEnabled] = useState(true)
   const [error, setError] = useState('')
@@ -46,22 +40,19 @@ export default function CheckFormModal({ isOpen, onClose, onSuccess, siteId, che
 
   const loadCheckTypes = async () => {
     try {
-      const token = localStorage.getItem('access_token')
-      const response = await axios.get('/api/v1/checks/types', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      setCheckTypes(response.data)
-      if (!isEdit && response.data.length > 0) {
-        setSelectedType(response.data[0].type)
-        setConfiguration(getDefaultConfig(response.data[0]))
+      const types = await checksApi.listTypes()
+      setCheckTypes(types)
+      if (!isEdit && types.length > 0) {
+        setSelectedType(types[0].type)
+        setConfiguration(getDefaultConfig(types[0]))
       }
     } catch (err) {
       console.error('Error loading check types:', err)
     }
   }
 
-  const getDefaultConfig = (checkType: any) => {
-    const defaults: any = {}
+  const getDefaultConfig = (checkType: CheckTypeInfo): Record<string, any> => {
+    const defaults: Record<string, any> = {}
     if (checkType.config_schema?.properties) {
       Object.entries(checkType.config_schema.properties).forEach(([key, schema]: [string, any]) => {
         if (schema.default !== undefined) {
@@ -98,23 +89,21 @@ export default function CheckFormModal({ isOpen, onClose, onSuccess, siteId, che
     setIsLoading(true)
 
     try {
-      const token = localStorage.getItem('access_token')
-      const payload = {
-        site_id: siteId,
-        check_type: selectedType,
-        name,
-        configuration,
-        interval_seconds: intervalSeconds,
-        is_enabled: isEnabled
-      }
-
-      if (isEdit) {
-        await axios.put(`/api/v1/checks/${check.id}`, payload, {
-          headers: { Authorization: `Bearer ${token}` }
+      if (isEdit && check) {
+        await checksApi.update(check.id, {
+          name,
+          configuration,
+          interval_seconds: intervalSeconds,
+          is_enabled: isEnabled
         })
       } else {
-        await axios.post('/api/v1/checks/', payload, {
-          headers: { Authorization: `Bearer ${token}` }
+        await checksApi.create({
+          site_id: siteId,
+          check_type: selectedType,
+          name,
+          configuration,
+          interval_seconds: intervalSeconds,
+          is_enabled: isEnabled
         })
       }
 
