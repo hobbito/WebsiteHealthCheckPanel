@@ -14,10 +14,14 @@ async def lifespan(app: FastAPI):
     print(f"🚀 Starting {settings.APP_NAME}...")
 
     # Import all domain models to register them with Base
-    from app.domains import auth, sites, checks  # noqa: F401
+    from app.domains import auth, sites, checks, notifications  # noqa: F401
 
     # Import check plugins to register them
-    from app.domains.checks.plugins import http_check  # noqa: F401
+    from app.domains.checks.plugins import http_check, dns_check, ssl_check  # noqa: F401
+    from app.domains.checks.plugins import ping_check, keyword_check, port_check  # noqa: F401
+
+    # Import notification channels to register them
+    from app.domains.notifications.channels import email, webhook  # noqa: F401
 
     # Create tables if they don't exist (development only)
     if settings.ENVIRONMENT == "development":
@@ -101,9 +105,11 @@ async def root():
 from app.domains.auth import router as auth_router
 from app.domains.sites import router as sites_router
 from app.domains.checks import router as checks_router
+from app.domains.notifications import router as notifications_router
 from app.api.v1 import stream
 
 app.include_router(auth_router, prefix=f"{settings.API_V1_PREFIX}/auth", tags=["Authentication"])
 app.include_router(sites_router, prefix=f"{settings.API_V1_PREFIX}/sites", tags=["Sites"])
 app.include_router(checks_router, prefix=f"{settings.API_V1_PREFIX}/checks", tags=["Checks"])
+app.include_router(notifications_router, prefix=f"{settings.API_V1_PREFIX}/notifications", tags=["Notifications"])
 app.include_router(stream.router, prefix=f"{settings.API_V1_PREFIX}/stream", tags=["Real-time Updates"])

@@ -49,6 +49,16 @@ export default function DashboardHeader({ user, onLogout }: DashboardHeaderProps
               >
                 Sites
               </a>
+              <a
+                href="/dashboard/notifications"
+                className={`px-3 py-2 text-sm font-medium rounded-md ${
+                  isActive('/dashboard/notifications')
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                Notifications
+              </a>
             </nav>
           </div>
 

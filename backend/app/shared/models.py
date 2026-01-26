@@ -3,7 +3,7 @@ Central import for all models to ensure proper SQLAlchemy relationship resolutio
 Import this module instead of individual model modules to avoid circular import issues.
 """
 
-# Import in dependency order: auth -> sites -> checks
+# Import in dependency order: auth -> sites -> checks -> notifications
 from app.domains.auth.models import User, Organization, UserRole
 from app.domains.sites.models import Site
 from app.domains.checks.models import (
@@ -12,6 +12,14 @@ from app.domains.checks.models import (
     Incident,
     CheckStatus,
     IncidentStatus
+)
+from app.domains.notifications.models import (
+    NotificationChannel,
+    NotificationRule,
+    NotificationLog,
+    NotificationChannelType,
+    NotificationTrigger,
+    NotificationStatus,
 )
 
 __all__ = [
@@ -24,4 +32,10 @@ __all__ = [
     "Incident",
     "CheckStatus",
     "IncidentStatus",
+    "NotificationChannel",
+    "NotificationRule",
+    "NotificationLog",
+    "NotificationChannelType",
+    "NotificationTrigger",
+    "NotificationStatus",
 ]

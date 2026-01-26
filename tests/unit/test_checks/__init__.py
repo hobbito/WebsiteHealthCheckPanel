@@ -1,0 +1,1 @@
+"""Check plugin tests package"""
