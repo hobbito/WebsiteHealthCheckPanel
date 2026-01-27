@@ -6,7 +6,6 @@ from app.core.database import get_db_context
 from app.domains.checks.models import CheckConfiguration, CheckResult
 from app.domains.sites.models import Site
 from app.domains.checks.plugins.registry import CheckRegistry
-from app.domains.notifications.service import NotificationService
 from app.core.event_bus import event_bus
 from app.core.scheduler import get_scheduler
 
@@ -95,6 +94,8 @@ async def execute_check(check_id: int):
 
             # Handle notifications based on check result
             try:
+                # Lazy import to avoid circular dependency
+                from app.domains.notifications.service import NotificationService
                 await NotificationService.handle_check_result(
                     db, check_config, db_result, site
                 )
