@@ -54,6 +54,7 @@ out/
 build/
 dist/
 *.tsbuildinfo
+.vercel/
 
 # Test coverage
 htmlcov/
