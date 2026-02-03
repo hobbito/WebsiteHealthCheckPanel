@@ -9,6 +9,15 @@ import type {
   CheckTypeInfo,
 } from './types'
 
+// Get API base URL from environment or use relative path
+const getApiBaseUrl = () => {
+  // In browser, check for runtime config or use relative path
+  if (typeof window !== 'undefined') {
+    return (window as any).__API_URL__ || import.meta.env.PUBLIC_API_URL || '/api/v1'
+  }
+  return import.meta.env.PUBLIC_API_URL || '/api/v1'
+}
+
 // Helper to get auth headers
 const getAuthHeaders = () => {
   const token = localStorage.getItem('access_token')
@@ -19,7 +28,7 @@ const getAuthHeaders = () => {
 
 // Axios instance with default config
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: getApiBaseUrl(),
 })
 
 // Add auth header interceptor
