@@ -11,6 +11,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!frontend/src/lib/
 lib64/
 parts/
 sdist/
@@ -53,6 +54,7 @@ out/
 build/
 dist/
 *.tsbuildinfo
+.vercel/
 
 # Test coverage
 htmlcov/
